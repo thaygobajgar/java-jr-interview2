@@ -76,7 +76,6 @@ public class TransactionService {
             
             TransactionEntity savedTransaction = transactionRepository.save(transaction);
             
-            // Registra a taxa
             taxService.createTax(savedTransaction, taxRate);
             
             TransactionWithdrawDTO responseDTO = modelMapper.map(savedTransaction, TransactionWithdrawDTO.class);
@@ -88,7 +87,7 @@ public class TransactionService {
 
             return responseDTO;
         } else if ("deposit".equals(transactionDTO.getType())) {
-            TransactionEntity transaction = new TransactionEntity(); // Inicializando a transação
+            TransactionEntity transaction = new TransactionEntity();
             transaction.setClient(client);
             transaction.setCompany(company);
             transaction.setType(transactionDTO.getType());
@@ -122,17 +121,15 @@ public class TransactionService {
     }
 
     private String formatValueToCurrency(double value) {
-        // Usando Locale.forLanguageTag para evitar depreciação
         Locale locale = Locale.forLanguageTag("pt-BR");
         NumberFormat currencyFormatter = NumberFormat.getCurrencyInstance(locale);
-        return currencyFormatter.format(value / 100); // Considerando valor em centavos
+        return currencyFormatter.format(value / 100);
     }
 
     public void sendTransactionCallback(String companyCallbackUrl, TransactionDTO transaction) {
         try {
             restTemplate.postForObject(companyCallbackUrl, transaction, String.class);
         } catch (Exception e) {
-            // Tratar falhas no envio do callback
             System.out.println("Falha ao enviar callback.");
         }
     }

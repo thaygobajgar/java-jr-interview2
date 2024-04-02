@@ -14,15 +14,11 @@ public class TaxService {
     @Autowired
     private TaxRepository taxRepository;
 
-    // Método para criar uma taxa associada a uma transação
     public TaxEntity createTax(TransactionEntity transaction, double taxRate) {
-        // Calcula o valor da taxa baseado no valor da transação e na taxa
         double taxAmount = transaction.getValue() * taxRate;
 
-        // Cria uma nova entidade TaxEntity
         TaxEntity tax = new TaxEntity(transaction, taxAmount);
 
-        // Salva a taxa no banco de dados
         return taxRepository.save(tax);
     }
 }

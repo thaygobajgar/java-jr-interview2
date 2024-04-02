@@ -1,6 +1,5 @@
 package com.javaspring.javajrinterview.client;
 
-import java.util.Optional;
 import java.util.UUID;
 
 import org.modelmapper.ModelMapper;
