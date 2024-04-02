@@ -1,0 +1,99 @@
+package com.javaspring.javajrinterview.transaction;
+
+import java.text.NumberFormat;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.javaspring.javajrinterview.client.ClientEntity;
+import com.javaspring.javajrinterview.client.ClientRepository;
+import com.javaspring.javajrinterview.company.CompanyEntity;
+import com.javaspring.javajrinterview.company.CompanyRepository;
+import com.javaspring.javajrinterview.tax.TaxService;
+import com.javaspring.javajrinterview.transaction.dtos.TransactionDTO;
+import com.javaspring.javajrinterview.transaction.dtos.TransactionWithdrawDTO;
+
+@Service
+public class TransactionService {
+
+    @Autowired
+    private TransactionRepository transactionRepository;
+
+    @Autowired
+    private CompanyRepository companyRepository;
+
+    @Autowired
+    private ClientRepository clientRepository;
+
+    @Autowired
+    private TaxService taxService;
+
+    @Autowired
+    private ModelMapper modelMapper;
+
+    public Optional<TransactionEntity> findById(UUID id) {
+        return transactionRepository.findById(id);
+    }
+
+    public TransactionWithdrawDTO createTransaction(TransactionDTO transactionDTO) {
+        CompanyEntity company = companyRepository.findById(transactionDTO.getCompanyId())
+                .orElseThrow(() -> new RuntimeException("Empresa não encontrada."));
+        ClientEntity client = clientRepository.findById(transactionDTO.getClientId())
+                .orElseThrow(() -> new RuntimeException("Cliente não encontrado."));
+
+        if ("withdraw".equalsIgnoreCase(transactionDTO.getType())) {
+            double totalDeposits = calculateTotalAmountByType(client.getId(), "deposit");
+            double totalWithdrawals = calculateTotalAmountByType(client.getId(), "withdraw");
+            double currentBalance = totalDeposits - totalWithdrawals;
+
+            double taxRate = 0.02; // Taxa de 2%
+            double originalWithdrawAmount = transactionDTO.getValue() / (1 - taxRate);
+            double taxAmount = originalWithdrawAmount * taxRate;
+            double amountAfterTax = originalWithdrawAmount - taxAmount;
+
+            if (originalWithdrawAmount > currentBalance) {
+                throw new RuntimeException("Saldo insuficiente após considerar a taxa de saque.");
+            }
+
+            TransactionEntity transaction = modelMapper.map(transactionDTO, TransactionEntity.class);
+            transaction.setClient(client);
+            transaction.setCompany(company);
+            transaction.setValue(amountAfterTax); // Ajuste para o valor depois da taxa
+            transaction = transactionRepository.save(transaction);
+
+            // Registrar a taxa
+            taxService.createTax(transaction, taxAmount); // Ajuste conforme a implementação do seu TaxService
+
+            TransactionWithdrawDTO withdrawDTO = modelMapper.map(transactionDTO, TransactionWithdrawDTO.class);
+            withdrawDTO.setId(transaction.getId()); // Garantir que o ID é do objeto salvo
+            withdrawDTO.setValue(amountAfterTax); // Valor ajustado
+            withdrawDTO.setTaxes(taxAmount);
+
+            // Formatando os valores para R$ antes de retornar
+            withdrawDTO.setValue(withdrawDTO.getFormattedValue());
+            withdrawDTO.setTaxes(withdrawDTO.getFormattedTaxes());
+
+            return withdrawDTO;
+        } else {
+            // Para outros tipos de transação, a criação é direta
+            TransactionEntity transaction = modelMapper.map(transactionDTO, TransactionEntity.class);
+            transaction.setClient(client);
+            transaction.setCompany(company);
+            transaction = transactionRepository.save(transaction);
+
+            TransactionWithdrawDTO resultDTO = modelMapper.map(transaction, TransactionWithdrawDTO.class);
+            // Formatando o valor para R$ antes de retornar, se necessário
+            return resultDTO;
+        }
+    }
+
+    private double calculateTotalAmountByType(UUID clientId, String type) {
+        return transactionRepository.findAllByClientIdAndType(clientId, type).stream()
+                                    .mapToDouble(TransactionEntity::getValue)
+                                    .sum();
+    }
+}
